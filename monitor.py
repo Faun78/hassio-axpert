@@ -73,8 +73,14 @@ def serial_command(command):
                     baud_const = getattr(termios, 'B9600', termios.B9600)
 
                 attrs = termios.tcgetattr(fd)
-                termios.cfsetispeed(attrs, baud_const)
-                termios.cfsetospeed(attrs, baud_const)
+                # Some Python builds don't expose cfsetispeed/cfsetospeed.
+                # Set the ispeed/ospeed directly in the attrs list (indices 4 and 5).
+                try:
+                    termios.cfsetispeed(attrs, baud_const)
+                    termios.cfsetospeed(attrs, baud_const)
+                except AttributeError:
+                    attrs[4] = baud_const
+                    attrs[5] = baud_const
                 # set read behaviour: return as soon as any data or after timeout
                 attrs[6][termios.VMIN] = 0
                 attrs[6][termios.VTIME] = 5  # tenths of a second -> 0.5s
