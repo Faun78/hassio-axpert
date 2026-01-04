@@ -9,9 +9,35 @@ This is a Hassio addon to monitor [voltronic axpert inverters](http://www.voltro
 - 'power/axpert_settings' for the configured settings
 - 'power/axpert{sn}' for the data from the connected inverter (configurable, {sn} is replaced with the serial number of the inverter)
 
-You can then configure the sensors in Home Assistant like this:
+You can then configure the sensors in Home Assistant. Examples below show the modern MQTT integration format and a legacy YAML sensor example for reference.
 
+MQTT integration (recommended, add to `configuration.yaml` under `mqtt:`):
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Axpert Total Power"
+      state_topic: "power/axpert"
+      unit_of_measurement: 'W'
+      value_template: "{{ value_json.TotalAcOutputActivePower }}"
+      expire_after: 60
 ```
+
+Per-device sensor (replace `123456` with the inverter serial printed in the addon logs):
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Axpert 123456 Power"
+      state_topic: "axpert/123456/parallel"
+      unit_of_measurement: 'W'
+      value_template: "{{ value_json.TotalAcOutputActivePower }}"
+      expire_after: 60
+```
+
+Legacy YAML MQTT sensor (if still used):
+
+```yaml
 sensors:
   - platform: mqtt
     name: "Power"
@@ -20,6 +46,8 @@ sensors:
     value_template: "{{ value_json.TotalAcOutputActivePower }}"
     expire_after: 60
 ```
+
+Home Assistant discovery: enable the addon option `mqtt_ha_discovery` (or set `MQTT_HA_DISCOVERY=1`). When enabled the addon will publish discovery configs under `homeassistant/sensor/axpert_<sn>_<metric>/config` and sensors will be created automatically.
 
 The values published on 'power/axpert' are:
 - SerialNumber # of the first inverter in the parallel setup
