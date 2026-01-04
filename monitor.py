@@ -18,6 +18,7 @@ import crcmod.predefined
 from binascii import unhexlify
 import paho.mqtt.client as mqtt
 from random import randint
+import logging
 
 battery_types = {'0': 'AGM', '1': 'Flooded', '2': 'User'}
 voltage_ranges = {'0': 'Appliance', '1': 'UPS'}
@@ -34,10 +35,10 @@ def connect():
     client = mqtt.Client(client_id=os.environ['MQTT_CLIENT_ID'])
     client.username_pw_set(os.environ['MQTT_USER'], os.environ['MQTT_PASS'])
     client.connect(os.environ['MQTT_SERVER'])
-    print(os.environ['DEVICE'])
+    logger.info('Using device %s', os.environ.get('DEVICE'))
 
 def serial_command(command):
-    print(command)
+    logger.debug('serial_command -> %s', command)
 
     try:
         xmodem_crc_func = crcmod.predefined.mkCrcFun('xmodem')
@@ -60,8 +61,8 @@ def serial_command(command):
                 # If fcntl tweaks fail, continue; device may already be non-blocking
                 pass
         except Exception as e:
-            print('error open file descriptor: ' + str(e))
-            exit()
+            logger.exception('error open file descriptor')
+            exit(1)
 
         os.write(fd, command_crc)
 
@@ -83,7 +84,7 @@ def serial_command(command):
         except UnicodeDecodeError:
             response = response.decode('iso-8859-1')
 
-        print(response)
+        logger.debug('raw response: %s', response)
         response = response.rstrip()
         lastI = response.find('\r')
         response = response[1:lastI-2]
@@ -93,8 +94,8 @@ def serial_command(command):
         except Exception:
             pass
         return response
-    except Exception as e:
-        print('error reading inverter...: ' + str(e))
+    except Exception:
+        logger.exception('error reading inverter')
         try:
             if fd is not None:
                 os.close(fd)
@@ -147,8 +148,8 @@ def get_parallel_data():
             data += ',"Solarmode":0'
 
         data += '}'
-    except Exception as e:
-        print('error parsing inverter data...: ' + str(e))
+    except Exception:
+        logger.exception('error parsing parallel inverter data')
         return ''
     return data
 
@@ -174,8 +175,8 @@ def get_data():
 
         data += '}'
         return data
-    except Exception as e:
-        print('error parsing inverter data...: ' + str(e))
+    except Exception:
+        logger.exception('error parsing inverter data')
         return ''
 
 def get_settings():
@@ -217,24 +218,31 @@ def get_settings():
         
         data += '}'
         return data
-    except Exception as e:
-        print('error parsing inverter data...: ' + str(e))
+    except Exception:
+        logger.exception('error parsing settings data')
         return ''
 
 def send_data(data, topic):
     try:
         client.publish(topic, data, 0, True)
     except Exception as e:
-        print("error sending to emoncms...: " + str(e))
+        logger.exception('error sending to mqtt topic %s', topic)
         return 0
     return 1
 
 def main():
     time.sleep(randint(0, 5))  # so parallel streams might start at different times
+    # configure logging
+    log_level_name = os.environ.get('LOG_LEVEL', 'INFO').upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+    logging.basicConfig(level=log_level, format='%(asctime)s %(levelname)s:%(name)s: %(message)s')
+    global logger
+    logger = logging.getLogger('hassio-axpert')
+
     connect()
     
     serial_number = serial_command('QID')
-    print('Reading from inverter ' + serial_number)
+    logger.info('Reading from inverter %s', serial_number)
 
     while True:
         try:
@@ -252,8 +260,8 @@ def main():
             if data != '':
                 send_data(data, os.environ['MQTT_TOPIC_SETTINGS'])
             time.sleep(4)
-        except Exception as e:
-            print("Error occurred:", e)
+        except Exception:
+            logger.exception('Error occurred in main loop')
             # Consider handling specific errors or performing a reconnect here
             time.sleep(10)  # Delay before retrying to avoid continuous strain
 
