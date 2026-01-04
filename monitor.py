@@ -14,6 +14,8 @@ import os
 import fcntl
 import re
 import unicodedata
+import termios
+import tty
 import crcmod.predefined
 from binascii import unhexlify
 import paho.mqtt.client as mqtt
@@ -54,11 +56,33 @@ def serial_command(command):
             if hasattr(os, 'O_NONBLOCK'):
                 flags |= os.O_NONBLOCK
             fd = os.open(os.environ['DEVICE'], flags)
+
+            # Configure terminal/serial settings (baud, raw mode, timeout)
             try:
-                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+                # Raw mode
+                tty.setraw(fd)
+
+                # Determine baud rate from env (default 2400)
+                baud_env = os.environ.get('DEVICE_BAUD', '2400')
+                try:
+                    baud_int = int(baud_env)
+                except Exception:
+                    baud_int = 2400
+                baud_const = getattr(termios, 'B' + str(baud_int), None)
+                if baud_const is None:
+                    baud_const = getattr(termios, 'B9600', termios.B9600)
+
+                attrs = termios.tcgetattr(fd)
+                termios.cfsetispeed(attrs, baud_const)
+                termios.cfsetospeed(attrs, baud_const)
+                # set read behaviour: return as soon as any data or after timeout
+                attrs[6][termios.VMIN] = 0
+                attrs[6][termios.VTIME] = 5  # tenths of a second -> 0.5s
+                termios.tcsetattr(fd, termios.TCSANOW, attrs)
+                logger.debug('serial port %s opened at %d baud', os.environ.get('DEVICE'), baud_int)
             except Exception:
-                # If fcntl tweaks fail, continue; device may already be non-blocking
+                logger.exception('failed to configure serial port')
+                # continue, device may still work with defaults
                 pass
         except Exception as e:
             logger.exception('error open file descriptor')
