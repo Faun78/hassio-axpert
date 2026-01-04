@@ -1,6 +1,6 @@
 {
     "name": "Axpert Inverter",
-    "version": "0.5.2",
+    "version": "0.5.1",
     "slug": "axpert",
     "description": "Monitors an axpert inverter",
     "arch": ["amd64", "armv7", "aarch64"],
@@ -17,9 +17,7 @@
         "mqtt_topic_parallel": "power/axpert",
         "mqtt_topic_settings": "power/axpert_settings",
         "mqtt_topic": "power/axpert{sn}",
-        "device": "/dev/hidraw0",
-        "devices": "/dev/hidraw0",
-        "mqtt_ha_discovery": false
+        "device": "/dev/hidraw0"
     },
     "schema": {
         "mqtt_server": "str",
@@ -29,8 +27,6 @@
         "mqtt_topic_parallel": "str",
         "mqtt_topic_settings": "str",
         "mqtt_topic": "str",
-        "device": "str",
-        "devices": "str",
-        "mqtt_ha_discovery": "bool"
+        "device": "str"
     }
 }
