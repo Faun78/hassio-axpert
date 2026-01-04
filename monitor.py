@@ -45,11 +45,20 @@ def serial_command(command):
         command_crc_hex = hex(xmodem_crc_func(command_bytes)).replace('0x', '')
         command_crc = command_bytes + unhexlify(command_crc_hex.encode('utf-8')) + b'\x0d'
 
+        fd = None
         try:
-            file = open(os.environ['DEVICE'], 'r+')
-            fd = file.fileno()
-            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            # Open the device with low-level os.open to avoid file-like buffering
+            flags = os.O_RDWR | os.O_NOCTTY
+            # Try to add non-blocking flag if available
+            if hasattr(os, 'O_NONBLOCK'):
+                flags |= os.O_NONBLOCK
+            fd = os.open(os.environ['DEVICE'], flags)
+            try:
+                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            except Exception:
+                # If fcntl tweaks fail, continue; device may already be non-blocking
+                pass
         except Exception as e:
             print('error open file descriptor: ' + str(e))
             exit()
@@ -79,11 +88,18 @@ def serial_command(command):
         lastI = response.find('\r')
         response = response[1:lastI-2]
 
-        file.close()
+        try:
+            os.close(fd)
+        except Exception:
+            pass
         return response
     except Exception as e:
         print('error reading inverter...: ' + str(e))
-        file.close()
+        try:
+            if fd is not None:
+                os.close(fd)
+        except Exception:
+            pass
         time.sleep(0.1)
         connect()
         return serial_command(command)
